@@ -1,7 +1,3 @@
-// ==========================
-// PHASE 1 - STABLE CRUD BUILD
-// ==========================
-
 const $ = (id) => document.getElementById(id);
 
 function getData(key){
@@ -16,42 +12,43 @@ const state = {
   datasets: [],
   current: null,
   raw: [],
-  filtered: [],
-  columnsAll: [],
-  columns: [],
-  sortKey: null,
-  sortDir: "asc"
+  columns: []
 };
 
-// ---------- LOAD DATASET ----------
 async function loadDataset(slug){
   const ds = state.datasets.find(d=>d.slug===slug);
+  if(!ds) return;
+
   state.current = ds;
 
-  const res = await fetch(ds.file, {cache:"no-store"});
-  const json = await res.json();
+  try {
+    const res = await fetch(ds.file, {cache:"no-store"});
+    if(!res.ok) throw new Error("Fetch failed");
 
-  const storageKey = slug.replace(/-/g,"_")+"_data";
-  const stored = getData(storageKey);
+    const json = await res.json();
 
-  state.raw = stored.length ? stored : (json.rows || []);
-  state.columnsAll = state.raw.length ? Object.keys(state.raw[0]) : (json.columns || []);
-  state.columns = state.columnsAll;
+    const key = slug.replace(/-/g,"_")+"_data";
+    const stored = getData(key);
+
+    state.raw = stored.length ? stored : (json.rows || json);
+    state.columns = state.raw.length ? Object.keys(state.raw[0]) : [];
+
+  } catch(e){
+    console.error("Dataset load error:", e);
+    state.raw = [];
+    state.columns = [];
+  }
 
   render();
 }
 
-// ---------- RENDER ----------
 function render(){
-  buildTable();
-}
-
-function buildTable(){
-  const tbody = $("tbl").querySelector("tbody");
   const thead = $("tbl").querySelector("thead");
-
+  const tbody = $("tbl").querySelector("tbody");
   thead.innerHTML="";
   tbody.innerHTML="";
+
+  if(!state.columns.length) return;
 
   const trh = document.createElement("tr");
   state.columns.forEach(c=>{
@@ -73,7 +70,26 @@ function buildTable(){
   });
 }
 
-// ---------- ADD / EDIT ----------
+function openDetails(row){
+  $("d_body").innerHTML="";
+  Object.keys(row).forEach(k=>{
+    const p=document.createElement("div");
+    p.textContent=k+": "+row[k];
+    $("d_body").appendChild(p);
+  });
+
+  const edit=document.createElement("button");
+  edit.className="btn";
+  edit.textContent="Edit";
+  edit.onclick=()=>{
+    $("details").close();
+    openFormEditor(row);
+  };
+  $("d_body").appendChild(edit);
+
+  $("details").showModal();
+}
+
 function openFormEditor(row=null){
   const slug = state.current.slug;
   const key = slug.replace(/-/g,"_")+"_data";
@@ -83,9 +99,8 @@ function openFormEditor(row=null){
   container.className="card";
   container.style.margin="12px";
   container.style.padding="12px";
-  container.id="editor";
 
-  state.columnsAll.forEach(col=>{
+  state.columns.forEach(col=>{
     const label=document.createElement("label");
     label.textContent=col;
     container.appendChild(label);
@@ -138,28 +153,6 @@ function openFormEditor(row=null){
   document.body.insertBefore(container, document.body.firstChild);
 }
 
-// ---------- DETAILS ----------
-function openDetails(row){
-  $("d_body").innerHTML="";
-  Object.keys(row).forEach(k=>{
-    const p=document.createElement("div");
-    p.textContent=k+": "+row[k];
-    $("d_body").appendChild(p);
-  });
-
-  const edit=document.createElement("button");
-  edit.className="btn";
-  edit.textContent="Edit";
-  edit.onclick=()=>{
-    $("details").close();
-    openFormEditor(row);
-  };
-  $("d_body").appendChild(edit);
-
-  $("details").showModal();
-}
-
-// ---------- INIT ----------
 async function init(){
   const dsRes = await fetch("datasets.json",{cache:"no-store"});
   state.datasets = await dsRes.json();
@@ -180,4 +173,5 @@ async function init(){
 
   await loadDataset(state.datasets[0].slug);
 }
+
 init();
